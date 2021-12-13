@@ -103,7 +103,7 @@ class BackgroudWindow(Gtk.Window):
             MessageButtonWindow("Info", message)
         message.show()
 
-        if self._index >= 2:
+        if self._index >= 8:
             message.connect("destroy", self._done)
         else:
             message.connect("destroy", self._show_fixation_cross)

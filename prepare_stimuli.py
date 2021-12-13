@@ -24,26 +24,27 @@ def prepare_stimuli_list(subject_id: str):
         random.shuffle(files)
         random_categories.append(files)
     random.shuffle(random_categories)
+    print(random_categories)
     f2f_list: List = []
     for category in random_categories:
-        f2f_list.extend(category[0:3])
+        f2f_list.extend(category[0:2])
       
     random.shuffle(random_categories)
     remote_list: List = []
     for category in random_categories:
-        remote_list.extend(category[3:6])
+        remote_list.extend(category[2:4])
     
 
     if not os.path.exists("stimuli/f2f"):
         pathlib.Path("stimuli/f2f").mkdir(parents=True)
-    with open("stimuli/f2f/p{0}_stimuli.csv".format(subject_id), "w") as csv_file:
+    with open("stimuli/f2f/p{0}_stimuli.csv".format(str.zfill(subject_id,2)), "w") as csv_file:
         csv_writer = csv.writer(csv_file)
         for stimuli in f2f_list:
             csv_writer.writerow([stimuli])
     
     if not os.path.exists("stimuli/remote"):
         pathlib.Path("stimuli/remote").mkdir(parents=True)
-    with open("stimuli/remote/p{0}_stimuli.csv".format(subject_id), "w") as csv_file:
+    with open("stimuli/remote/p{0}_stimuli.csv".format(str.zfill(subject_id,2)), "w") as csv_file:
         csv_writer = csv.writer(csv_file)
         for stimuli in remote_list:
             csv_writer.writerow([stimuli])
