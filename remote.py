@@ -7,7 +7,7 @@ Steps:
 '''
 
 import os
-
+import socket
 import logging
 import datetime
 import http.client
@@ -30,7 +30,8 @@ EMOTIONS = {"1": "High-Valence, High-Arousal",
             "4": "Low-Valence, Low-Arousal"}
 
 def read_stimuli_order(subject_id):
-    stimuli_order_file_path = "stimuli/f2f/p{}_stimuli.csv".format(subject_id)
+    stimuli_order_file_path = "stimuli/remote/p{}_stimuli.csv".format(str(subject_id).zfill(2))
+    print(stimuli_order_file_path)
     if not os.path.exists(stimuli_order_file_path):
         prepare_stimuli_list(subject_id)
     order = []
@@ -38,6 +39,7 @@ def read_stimuli_order(subject_id):
         reader = csv.reader(csv_file)
         for row in reader:
             order.append(row[0])
+    print(order)
     return order
 
 STIMULI_PATH = "stimuli/all_images/"
@@ -114,13 +116,28 @@ class BackgroudWindow(Gtk.Window):
         '''
         logging.info("Fixation cross {0}".format(datetime.datetime.now()))
         self.image_window.set_image("images/fixation_cross.jpg")
-        self._http_client.request("POST", "/",
-                                  body=msgpack.packb({'type': 'START',
-                                  'experiment_id': self._experiment_id,
-                                  'stimulus_id': self._stimuli_list[self._index][:-4]}),
-                                  headers={'Accept': 'application/msgpack'})
-        response = self._http_client.getresponse()
-        assert response.status == 200
+        try:
+            self._http_client.request("POST", "/",
+                                    body=msgpack.packb({'type': 'START',
+                                    'experiment_id': self._experiment_id,
+                                    'stimulus_id': self._stimuli_list[self._index][:-4]}),
+                                    headers={'Accept': 'application/msgpack'})
+            response = self._http_client.getresponse()
+            assert response.status == 200
+        except socket.error:
+            try:
+                logging.info("Start failed {0}, {1}".format(datetime.datetime.now(),
+                                                            self._stimuli_list[self._index][:-4]))
+                self._http_client.request("POST", "/",
+                                        body=msgpack.packb({'type': 'START',
+                                        'experiment_id': self._experiment_id,
+                                        'stimulus_id': self._stimuli_list[self._index][:-4]}),
+                                        headers={'Accept': 'application/msgpack'})
+                response = self._http_client.getresponse()
+                assert response.status == 200
+            except:
+                logging.info("Start failed 2{0}, {1}".format(datetime.datetime.now(),
+                                                             self._stimuli_list[self._index][:-4]))
 
         GLib.timeout_add_seconds(3, self._show_stimuli)
 
@@ -148,25 +165,57 @@ class BackgroudWindow(Gtk.Window):
         timer.connect("destroy", self._questionnaire)
 
     def _questionnaire(self, *args):
-        self._http_client.request("POST", "/",
-                                body=msgpack.packb({'type': 'STOP',
-                                'experiment_id': self._experiment_id,
-                                'stimulus_id': self._stimuli_list[self._index][:-4]}),
-                                headers={'Accept': 'application/msgpack'})
-        response = self._http_client.getresponse()
-        assert response.status == 200
+        try:
+            self._http_client.request("POST", "/",
+                                    body=msgpack.packb({'type': 'STOP',
+                                    'experiment_id': self._experiment_id,
+                                    'stimulus_id': self._stimuli_list[self._index][:-4]}),
+                                    headers={'Accept': 'application/msgpack'})
+            response = self._http_client.getresponse()
+            assert response.status == 200
+            logging.info("Stop passed {0}, {1}".format(datetime.datetime.now(),
+                                                       self._stimuli_list[self._index][:-4]))
+        except socket.error:
+            logging.info("Stop failed {0}, {1}".format(datetime.datetime.now(),
+                                                       self._stimuli_list[self._index][:-4]))
+            try:
+                self._http_client.request("POST", "/",
+                                        body=msgpack.packb({'type': 'STOP',
+                                        'experiment_id': self._experiment_id,
+                                        'stimulus_id': self._stimuli_list[self._index][:-4]}),
+                                        headers={'Accept': 'application/msgpack'})
+                response = self._http_client.getresponse()
+                assert response.status == 200
+            except socket.error:
+                logging.info("Stop failed 2 {0}, {1}".format(datetime.datetime.now(),
+                                                             self._stimuli_list[self._index][:-4]))
+                pass
         self._index += 1
         self._show_message(message="Please answer the questionnaire.")
 
     def _done(self, *args):
-
-        self._http_client.request("POST", "/",
-                        body=msgpack.packb({'type': 'TERMINATE',
-                                            'experiment_id': self._experiment_id,
-                                            'stimulus_id': self._stimuli_list[self._index][:-4]}),
-                        headers={'Accept': 'application/msgpack'})
-        response = self._http_client.getresponse()
-        assert response.status == 200
+        try:
+            self._http_client.request("POST", "/",
+                            body=msgpack.packb({'type': 'TERMINATE',
+                                                'experiment_id': self._experiment_id,
+                                                'stimulus_id': 0}),
+                            headers={'Accept': 'application/msgpack'})
+            response = self._http_client.getresponse()
+            assert response.status == 200
+            logging.info("Done{0}".format(datetime.datetime.now()))
+        except socket.error:
+            logging.info("Done failed{0}".format(datetime.datetime.now()))
+            try:
+                self._http_client.request("POST", "/",
+                                body=msgpack.packb({'type': 'TERMINATE',
+                                                    'experiment_id': self._experiment_id,
+                                                    'stimulus_id': 0}),
+                                headers={'Accept': 'application/msgpack'})
+                response = self._http_client.getresponse()
+                assert response.status == 200
+            except:
+                logging.info("Done failed{0}".format(datetime.datetime.now()))
+                pass
         self.image_window.set_image("images/done_image.jpg")
         self.image_window.show_and_destroy_window(3)
         self.image_window.connect("destroy", self._terminate)
@@ -190,7 +239,7 @@ def main():
     subject_id, task_id = get_input_parameters()
     experiment_id = str(subject_id).zfill(2) + "-" + str(task_id).zfill(2)
 
-    http_client = http.client.HTTPConnection("0.0.0.0:9331", timeout=3)
+    http_client = http.client.HTTPConnection("172.24.16.32:9331", timeout=3)
 
     # Make delay for initializing all processes
     time.sleep(5)
