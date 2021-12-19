@@ -9,6 +9,7 @@ Steps:
 import os
 import logging
 logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s', level=logging.DEBUG)
+import time
 import datetime
 import http.client
 import pickle
@@ -45,8 +46,9 @@ def read_stimuli_order(subject_id):
 STIMULI_PATH = "stimuli/all_images/"
 
 class BackgroudWindow(Gtk.Window):
-    def __init__(self, experiment_id, subject_id, http_client):
-        self._http_client = http_client
+    def __init__(self, experiment_id, subject_id, host):
+        self._host = host
+        self._http_client = http.client.HTTPConnection(self._host, timeout=3)
         os.makedirs("logs", exist_ok=True)
         time_str = datetime.datetime.strftime(datetime.datetime.now(),
                                               "%Y-%m-%dT%H-%M-%S")
@@ -125,7 +127,7 @@ class BackgroudWindow(Gtk.Window):
 
         GLib.timeout_add_seconds(3, self._show_stimuli)
 
-    def __post_trigger(self, msg_dict, retries=1):
+    def __post_trigger(self, msg_dict, retries=60):
         try:
             self._http_client.request("POST", "/",
                             body=pickle.dumps(msg_dict),
@@ -138,8 +140,14 @@ class BackgroudWindow(Gtk.Window):
                 retry_msg = "Gave up."
             else:
                 retry_msg = "Re-trying."
-            logging.error(f"Sending start failed. {retry_msg}. time: {datetime.datetime.now()} Error: {err}")
+            logging.error(f"Sending start failed. {retry_msg}. Error: {err}")
             if retries > 0:
+                time.sleep(1)
+                try:
+                    # re-creating the connection, in case we've lost the connection
+                    self._http_client = http.client.HTTPConnection(self._host, timeout=3)
+                except Exception as err:
+                    logging.error(f"Failed to re-create the HTTP connection: {err}")
                 self.__post_trigger(msg_dict, retries=retries - 1)
 
     def _show_stimuli(self, *args):
@@ -203,12 +211,10 @@ def main():
     subject_id, task_id = get_input_parameters()
     experiment_id = str(subject_id).zfill(2) + "-" + str(task_id).zfill(2)
 
-    http_client = http.client.HTTPConnection("172.24.16.32:9331", timeout=3)
-
     # Make delay for initializing all processes
     time.sleep(5)
 
-    main_window = BackgroudWindow(experiment_id, subject_id, http_client)
+    main_window = BackgroudWindow(experiment_id, subject_id, "172.24.16.32:9331")
     main_window.show()
 
 
