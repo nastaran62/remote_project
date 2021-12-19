@@ -11,7 +11,7 @@ import socket
 import logging
 import datetime
 import http.client
-import msgpack
+import pickle
 from windows import ImageWindow, MessageButtonWindow, TimerWindow
 from prepare_stimuli import prepare_stimuli_list
 import time
@@ -116,30 +116,31 @@ class BackgroudWindow(Gtk.Window):
         '''
         logging.info("Fixation cross {0}".format(datetime.datetime.now()))
         self.image_window.set_image("images/fixation_cross.jpg")
-        try:
-            self._http_client.request("POST", "/",
-                                    body=msgpack.packb({'type': 'START',
-                                    'experiment_id': self._experiment_id,
-                                    'stimulus_id': self._stimuli_list[self._index][:-4]}),
-                                    headers={'Accept': 'application/msgpack'})
-            response = self._http_client.getresponse()
-            assert response.status == 200
-        except socket.error:
-            try:
-                logging.info("Start failed {0}, {1}".format(datetime.datetime.now(),
-                                                            self._stimuli_list[self._index][:-4]))
-                self._http_client.request("POST", "/",
-                                        body=msgpack.packb({'type': 'START',
-                                        'experiment_id': self._experiment_id,
-                                        'stimulus_id': self._stimuli_list[self._index][:-4]}),
-                                        headers={'Accept': 'application/msgpack'})
-                response = self._http_client.getresponse()
-                assert response.status == 200
-            except:
-                logging.info("Start failed 2{0}, {1}".format(datetime.datetime.now(),
-                                                             self._stimuli_list[self._index][:-4]))
+
+        logging.info(f"Sending START. Stimulus: {self._stimuli_list[self._index][:-4]}")
+        self.__post_trigger({
+            'type': 'START',
+            'experiment_id': self._experiment_id,
+            'stimulus_id': self._stimuli_list[self._index][:-4]})
 
         GLib.timeout_add_seconds(3, self._show_stimuli)
+
+    def __post_trigger(self, msg_dict, retries=1):
+        try:
+            self._http_client.request("POST", "/",
+                            body=pickle.dumps(msg_dict),
+                            headers={'Accept': 'application/pickle'})
+            response = self._http_client.getresponse()
+            if response.status != 200:
+                logging.error("Sending start trigger. Got HTTP status: {0} {1}".format(response.status, response.reason))
+        except Exception as err:
+            if retries == 0:
+                retry_msg = "Gave up."
+            else:
+                retry_msg = "Re-trying."
+            logging.error(f"Sending start failed. {retry_msg}. time: {datetime.datetime.now()} Error: {err}")
+            if retries > 0:
+                self.__post_trigger(msg_dict, retries=retries - 1)
 
     def _show_stimuli(self, *args):
         '''
@@ -165,57 +166,20 @@ class BackgroudWindow(Gtk.Window):
         timer.connect("destroy", self._questionnaire)
 
     def _questionnaire(self, *args):
-        try:
-            self._http_client.request("POST", "/",
-                                    body=msgpack.packb({'type': 'STOP',
-                                    'experiment_id': self._experiment_id,
-                                    'stimulus_id': self._stimuli_list[self._index][:-4]}),
-                                    headers={'Accept': 'application/msgpack'})
-            response = self._http_client.getresponse()
-            assert response.status == 200
-            logging.info("Stop passed {0}, {1}".format(datetime.datetime.now(),
-                                                       self._stimuli_list[self._index][:-4]))
-        except socket.error:
-            logging.info("Stop failed {0}, {1}".format(datetime.datetime.now(),
-                                                       self._stimuli_list[self._index][:-4]))
-            try:
-                self._http_client.request("POST", "/",
-                                        body=msgpack.packb({'type': 'STOP',
-                                        'experiment_id': self._experiment_id,
-                                        'stimulus_id': self._stimuli_list[self._index][:-4]}),
-                                        headers={'Accept': 'application/msgpack'})
-                response = self._http_client.getresponse()
-                assert response.status == 200
-            except socket.error:
-                logging.info("Stop failed 2 {0}, {1}".format(datetime.datetime.now(),
-                                                             self._stimuli_list[self._index][:-4]))
-                pass
+        logging.info(f"Sending STOP. Stimulus: {self._stimuli_list[self._index][:-4]}")
+        self.__post_trigger({
+            'type': 'STOP',
+            'experiment_id': self._experiment_id,
+            'stimulus_id': self._stimuli_list[self._index][:-4]})
         self._index += 1
         self._show_message(message="Please answer the questionnaire.")
 
     def _done(self, *args):
-        try:
-            self._http_client.request("POST", "/",
-                            body=msgpack.packb({'type': 'TERMINATE',
-                                                'experiment_id': self._experiment_id,
-                                                'stimulus_id': 0}),
-                            headers={'Accept': 'application/msgpack'})
-            response = self._http_client.getresponse()
-            assert response.status == 200
-            logging.info("Done{0}".format(datetime.datetime.now()))
-        except socket.error:
-            logging.info("Done failed{0}".format(datetime.datetime.now()))
-            try:
-                self._http_client.request("POST", "/",
-                                body=msgpack.packb({'type': 'TERMINATE',
-                                                    'experiment_id': self._experiment_id,
-                                                    'stimulus_id': 0}),
-                                headers={'Accept': 'application/msgpack'})
-                response = self._http_client.getresponse()
-                assert response.status == 200
-            except:
-                logging.info("Done failed{0}".format(datetime.datetime.now()))
-                pass
+        logging.info("Sending TERMINATE.")
+        self.__post_trigger({
+            'type': 'TERMINATE',
+            'experiment_id': self._experiment_id,
+            'stimulus_id': 0})
         self.image_window.set_image("images/done_image.jpg")
         self.image_window.show_and_destroy_window(3)
         self.image_window.connect("destroy", self._terminate)
