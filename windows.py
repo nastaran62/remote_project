@@ -13,7 +13,7 @@
 # If not, see <https://www.gnu.org/licenses/>.
 
 from screeninfo import get_monitors
-from gi.repository import Gtk, GdkPixbuf, GLib, Gst
+from gi.repository import Gtk, GdkPixbuf, GLib, Gst, GObject
 import gi
 gi.require_version('Gtk', '3.0')
 gi.require_version('Gst', '1.0')
@@ -165,6 +165,7 @@ class TimerWindow(Gtk.Window):
 
     '''
     def __init__(self, title:str, message: str="", width:int= 400, height: int= 200, font_size=20):
+        self._font_style = "<span font_desc='Tahoma {0}'>{1}</span>"
         self._destroy = False
         Gtk.Window.__init__(self, title=title)
         self.set_default_size(width, height)
@@ -173,11 +174,11 @@ class TimerWindow(Gtk.Window):
                         row_spacing=30)
         self._font_size = font_size
         label = Gtk.Label()
-        label.set_markup(FONT_STYLE.format(self._font_size, message))
+        label.set_markup(self._font_style.format(self._font_size, message))
         grid.attach(label, 0, 0, 1, 1)
         self._timer_button = Gtk.Button.new_with_label("")
         self._timer_button.connect("clicked", self._on_click_timer_button)
-        self._timer_button.get_child().set_markup(FONT_STYLE.format(self._font_size, "0 : 0"))
+        self._timer_button.get_child().set_markup(self._font_style.format(self._font_size, "0 : 0"))
         Gtk.Widget.set_size_request(self._timer_button, 600, 300)
         grid.attach(self._timer_button, 0, 1, 1, 1)
         self.add(grid)
@@ -196,7 +197,7 @@ class TimerWindow(Gtk.Window):
             self.__min += 1
         now_time = str(self.__min) + " : " + str(self.__sec)
         self._timer_button.get_child().set_markup(
-            FONT_STYLE.format(self._font_size, now_time))
+            self._font_style.format(self._font_size, now_time))
         return True
 
     # Initialize Timer
