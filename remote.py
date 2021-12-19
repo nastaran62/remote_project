@@ -7,8 +7,8 @@ Steps:
 '''
 
 import os
-import socket
 import logging
+logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s', level=logging.DEBUG)
 import datetime
 import http.client
 import pickle
